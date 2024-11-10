@@ -1,0 +1,136 @@
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <omp.h>
+
+void transpose(double *A, double *B, int n) {
+    int i,j;
+    for(i=0; i<n; i++) {
+        for(j=0; j<n; j++) {
+            B[j*n+i] = A[i*n+j];
+        }
+    }
+}
+
+void mm(double *A, double *B, double *C, int n) 
+{   
+    int i, j, k;
+    for (i = 0; i < n; i++) { 
+        for (j = 0; j < n; j++) {
+            double dot  = 0;
+            for (k = 0; k < n; k++) {
+                dot += A[i*n+k]*B[k*n+j];
+            } 
+            C[i*n+j ] = dot;
+        }
+    }
+}
+
+void mm_omp(double *A, double *B, double *C, int n) 
+{   
+    #pragma omp parallel
+    {
+        int i, j, k;
+        #pragma omp for
+        for (i = 0; i < n; i++) { 
+            for (j = 0; j < n; j++) {
+                double dot  = 0;
+                for (k = 0; k < n; k++) {
+                    dot += A[i*n+k]*B[k*n+j];
+                } 
+                C[i*n+j ] = dot;
+            }
+        }
+
+    }
+}
+
+void mmT(double *A, double *B, double *C, int n) 
+{   
+    int i, j, k;
+    double *B2;
+    B2 = (double*)malloc(sizeof(double)*n*n);
+    transpose(B,B2, n);
+    for (i = 0; i < n; i++) { 
+        for (j = 0; j < n; j++) {
+            double dot  = 0;
+            for (k = 0; k < n; k++) {
+                dot += A[i*n+k]*B2[j*n+k];
+            } 
+            C[i*n+j ] = dot;
+        }
+    }
+    free(B2);
+}
+
+void mmT_omp(double *A, double *B, double *C, int n) 
+{   
+    double *B2;
+    B2 = (double*)malloc(sizeof(double)*n*n);
+    transpose(B,B2, n);
+    #pragma omp parallel
+    {
+        int i, j, k;
+        #pragma omp for
+        for (i = 0; i < n; i++) { 
+            for (j = 0; j < n; j++) {
+                double dot  = 0;
+                for (k = 0; k < n; k++) {
+                    dot += A[i*n+k]*B2[j*n+k];
+                } 
+                C[i*n+j ] = dot;
+            }
+        }
+
+    }
+    free(B2);
+}
+
+int main() {
+    int i, n;
+    double *A, *B, *C, dtime, sequential_time_default, sequential_time_transpose, parallel_time;
+
+    n=1024;
+    A = (double*)malloc(sizeof(double)*n*n);
+    B = (double*)malloc(sizeof(double)*n*n);
+    C = (double*)malloc(sizeof(double)*n*n);
+    for(i=0; i<n*n; i++) { A[i] = rand()/RAND_MAX; B[i] = rand()/RAND_MAX;}
+
+    dtime = omp_get_wtime();
+    mm(A,B,C, n);
+    dtime = omp_get_wtime() - dtime;
+    printf(" Sequential Time using DEFAULT method: %f\n\n", dtime);
+    sequential_time_default = dtime;
+
+
+    dtime = omp_get_wtime();
+    mmT(A,B,C, n);
+    dtime = omp_get_wtime() - dtime;
+    printf(" Sequential Time using TRANSPOSE method: %f\n\n", dtime);
+    sequential_time_transpose = dtime;
+
+
+    for(int z = 2; z<=16; z+=2){
+        printf("\n\n\n*** Using %d threads for parallel computations ***\n\n\n",z);
+
+        omp_set_num_threads(z);
+
+        dtime = omp_get_wtime();
+        mm_omp(A,B,C, n);
+        dtime = omp_get_wtime() - dtime;
+        parallel_time = dtime;
+        printf(" Parallel Time using DEFAULT method: %f\n\n", parallel_time);
+        printf("The SpeedUp when using the DEFAULT method is:%f\n\n",sequential_time_transpose/parallel_time);
+        printf("The Efficiency when using the DEFAULT method is:%f\n\n",((sequential_time_transpose/parallel_time)/z)*100);
+
+        dtime = omp_get_wtime();
+        mmT_omp(A,B,C, n);
+        dtime = omp_get_wtime() - dtime;
+        parallel_time = dtime;
+        printf(" Parallel Time using TRANSPOSE method: %f\n\n", parallel_time);
+        printf("The SpeedUp when using the TRANSPOSE method is:%f\n",sequential_time_transpose/parallel_time);
+        printf("The Efficiency when using the TRANSPOSE method is:%f\n\n",((sequential_time_transpose/parallel_time)/z)*100);
+    }
+    return 0;
+
+}
